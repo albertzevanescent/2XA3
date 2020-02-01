@@ -1,0 +1,400 @@
+%include "simple_io.inc"
+
+global asm_main
+extern rperm
+
+section .data
+	err1: db "First character is not 1 - 8", 10, 0
+	err2: db "No comma", 10, 0
+	err3: db "Third character is not 1 - 8", 10, 0
+	err4: db "No need to swap a box with itself", 10, 0
+	err5: db "Too many characters", 10, 0
+	msg1: db "Enter a,b to swap", 10, 0
+	msg2: db "Enter 0 to end: ", 0
+	msg3: db "Box ", 0
+	msg4: db " has been swapped with box ", 0
+	msg5: db "Program terminated", 10, 0
+section .bss
+	array: resq 8
+	buffer: resb 4
+section .text
+
+disp_seg:
+	enter 0,0
+	saveregs
+
+	;r14 for element
+	;r13 for level
+	;r12 for left spacing
+	;r15 for loop counting
+	;bl for 1st printing char
+	;cl for 2nd printing char
+
+	mov r14, [rbp+24] ; element
+	mov r13, [rbp+32] ; level
+	dec r13 ; Offset
+
+	;;;;;;;BASE Level;;;;;;;;;;
+
+	cmp r13, qword 0
+	jne NOTBASE
+
+	mov r15, qword 0
+	BASE_L_S:
+	  cmp r15, qword 5
+	  je BASE_L_E
+	  mov al, ' '
+	  call print_char
+	  inc r15
+	  jmp BASE_L_S
+
+	BASE_L_E:
+
+	mov rax, r14
+	call print_int
+	
+	mov r15, qword 0
+	BASE_R_S:
+	  cmp r15, qword 4
+	  je BASE_R_E
+	  mov al, ' '
+	  call print_char
+	  inc r15
+	  jmp BASE_R_S
+
+	BASE_R_E:
+	  jmp DONE
+
+	NOTBASE:
+
+	;;;;;;;;;;Left Spacing Amount;;;;;;;;;;
+
+	mov r12, qword 2 ; Left spacing of rect
+	cmp r14, qword 8
+	je CHAR1
+	cmp r14, qword 7
+	je CHAR1
+	inc r12 ; 3 spacing
+	cmp r14, qword 6
+	je CHAR1
+	cmp r14, qword 5
+	je CHAR1
+	inc r12 ; 4 spacing
+	cmp r14, qword 4
+	je CHAR1
+	cmp r14, qword 3
+	je CHAR1
+	inc r12 ; 5 spacing
+
+	;;;;;;;;;;;1st Spacing Char;;;;;;;;;;;;;
+
+	CHAR1:
+
+	;;;;;;;;;;Level 1;;;;;;;;;;;;;;;;
+
+	cmp qword r13, qword 1 ; level == 1
+	jne NOT_L_1
+	mov rbx, qword 0
+	mov bl, '.'
+	mov rcx, qword 0
+	mov cl, '-'
+	jmp PRINTING
+
+	;;;;;;;;;;;Not Level 1;;;;;;;;;;;
+
+	NOT_L_1:
+	mov rbx, qword 0
+	mov bl, ' '
+
+	;;;;;;;Overhead Space;;;;;;;;
+	
+	cmp r14, r13 ; element < level
+	jae CHAR2
+	
+	EMPTY_SPACE:  
+	  mov r15, qword 0
+	  EMPTY_SPACE_S:
+	    cmp r15, qword 10
+	    je DONE
+	    mov al, ' '
+	    call print_char
+	    inc r15
+	    jmp EMPTY_SPACE_S
+
+	;;;;;2nd Spacing Char;;;;;;;;
+
+	CHAR2:
+	
+	cmp r14, r13 ; element == level
+	jne BLANK
+	mov rcx, qword 0
+	mov cl, '-'
+	jmp PRINTING
+	BLANK:
+	mov rcx, qword 0
+	mov cl, ' '
+
+	;;;;;;;;;Printing;;;;;;;;;;
+
+	PRINTING:
+
+	;;;;;;;;;Left Spacing;;;;;
+
+	LEFT:
+
+	  mov r15, qword 0
+	  LEFT_S:
+	    cmp r15, r12 ; counter == left spacing
+	    je LEFT_E
+	    mov al, bl
+	    call print_char
+	    inc r15
+	    jmp LEFT_S
+
+	  LEFT_E:
+
+	;;;;;;Rectangle Printing;;;;;;;
+
+	  mov al, '+'
+	  call print_char
+
+	  cmp r14, qword 1 ; 1 has only 1 +
+	  je RIGHT
+
+	MIDDLE:
+	  
+	  mov r15, r14
+	  sub r15, qword 2
+	  
+	  MID_S:
+	    cmp r15, qword 0
+	    jbe MID_E
+	    mov al, cl
+	    call print_char
+	    dec r15
+	    jmp MID_S
+
+	  MID_E:
+	    mov al, '+'
+	    call print_char
+
+	;;;;;;Right Spacing;;;;;;;;;;
+
+	RIGHT:
+
+	  mov r15, qword 10 ; Right spacing, 10 - element - left spacing
+	  sub r15, r14
+	  sub r15, r12
+		
+	  RIGHT_S:
+	    cmp r15, qword 0
+	    je RIGHT_E
+	    mov al, bl
+	    call print_char
+	    dec r15
+	    jmp RIGHT_S
+	  
+	  RIGHT_E:
+
+	DONE:
+	restoregs
+	leave
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+display:
+	enter 0,0
+	saveregs
+
+	;rbx for array
+	;rcx for size
+	;r15 for loop counting
+	;r14 for level counter
+	;r13 for array counter
+
+	mov rbx, [rbp+24] ; array
+	mov rcx, [rbp+32] ; size
+
+	mov r14, rcx ; level counter
+	inc r14 ; offset and include base level
+
+	DISP_S: ; Display each line
+
+          cmp r14, qword 0
+          je DISP_E
+
+	  mov r13, qword 0 ; array counter
+
+	  LINE_S: ; Display the segment for each element
+	    cmp r13, rcx ; array counte, size
+	    je LINE_E
+	    
+	    push r14 ; level
+	    push qword [rbx+r13*8] ; nth element in array
+	    sub rsp, 8
+	    call disp_seg
+	    add rsp, 24
+	    
+	    inc r13 ; Updata array counter
+
+	    jmp LINE_S
+
+	  LINE_E:
+	  
+	  dec r14 ; Update level counter
+	  call print_nl
+
+	  jmp DISP_S
+	
+	DISP_E:
+	  
+	restoregs
+	leave
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+asm_main:	
+	enter 0,0
+	saveregs
+
+	mov	rdi, array ; Randomize array
+	mov	rsi, qword 8
+	call rperm
+
+	LOOPING:
+
+	push qword 8
+	push array
+	sub rsp, 8
+	call display
+	add rsp, 24
+
+	;;;;;;;;Input;;;;;;;;
+
+	mov rax, msg1
+	call print_string
+	mov rax, msg2
+	call print_string
+
+	mov r15, qword 0
+	READ_S: ; Read until input buffer is empty
+	  call read_char
+	  cmp r15, qword 4 ; Only up to 4 characters matter for correct input
+	  jae OVERFLOW
+	  mov byte [buffer+r15], al
+
+	  OVERFLOW:
+	  inc r15
+	  cmp al, byte 10
+	  je READ_E
+	  jmp READ_S
+
+	READ_E:
+
+	cmp byte [buffer], '0' ; Exit
+	jne INPUT_SWAP
+	cmp byte [buffer+1], byte 10
+	je END
+	jmp ERR5
+
+	INPUT_SWAP: 
+
+	cmp byte [buffer], '1' ; Checking
+	jb ERR1
+	cmp byte [buffer], '8'
+	ja ERR1
+	cmp byte [buffer+1], ','
+	jne ERR2
+	cmp byte [buffer+2], '1'
+	jb ERR3
+	cmp byte [buffer+2], '8'
+	ja ERR3
+	mov r15b, byte [buffer] ; Swapping the same box works but why bother?
+	cmp r15b, byte [buffer+2]
+	je ERR4
+	cmp byte [buffer+3], byte 10 ; The enter key produces byte 10
+	jne ERR5
+
+	;;;;;;;Swap;;;;;;;
+
+	mov rax, msg3
+	call print_string
+	mov al, byte [buffer]
+	call print_char
+	mov rax, msg4
+	call print_string
+	mov al, byte [buffer+2]
+	call print_char
+	call print_nl
+
+	swap:
+
+	mov r14, qword 0
+	mov r14b, byte [buffer] ; Char to int
+	sub r14, '0'
+	mov r13, qword 0
+	mov r13b, byte [buffer+2]
+	sub r13, '0'
+
+	mov r15, qword 0
+
+	FIRST_S: ; Find 1st position
+	  cmp r14, [array+r15*8]
+	  je FIRST_E
+	  inc r15
+	  jmp FIRST_S
+
+	FIRST_E:
+
+	mov r14, r15 ; 1st position
+	mov r15, qword 0
+
+	SECOND_S: ; Find 2nd position
+	  cmp r13, [array+r15*8]
+	  je SECOND_E
+	  inc r15
+	  jmp SECOND_S
+
+	SECOND_E:
+
+	mov r13, r15 ; 2nd position
+
+	mov r12, qword [array+r14*8] ; Swap 1st and 2nd using temp
+	mov r15, qword [array+r13*8]
+	mov qword [array+r14*8], r15
+	mov qword [array+r13*8], r12
+
+	jmp LOOPING
+
+	ERR1:
+	  mov rax, err1
+	  call print_string
+	  jmp LOOPING
+
+	ERR2:
+	  mov rax, err2
+	  call print_string
+	  jmp LOOPING
+
+	ERR3:
+	  mov rax, err3
+	  call print_string
+	  jmp LOOPING
+
+	ERR4:
+	  mov rax, err4
+	  call print_string
+	  jmp LOOPING
+
+	ERR5:
+	  mov rax, err5
+	  call print_string
+	  jmp LOOPING
+
+	END:
+	mov rax, msg5
+	call print_string
+
+	restoregs
+	leave
+	ret
